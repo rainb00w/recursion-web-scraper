@@ -1,5 +1,6 @@
 const cheerio = require("cheerio");
 const axios = require("axios");
+const fs = require("fs");
 
 // https://madappgang.com
 
@@ -26,7 +27,7 @@ const extractLinks = ($) => {
   linkObjects.each((index, element) => {
     // EXTRACTING LINKS FROM THE PAGE CODE
     const urlFromHtml = $(element).attr("href");
-    let urlFromHtmlCleaned = undefined;
+    let urlFromHtmlCleaned = urlFromHtml;
 
     if (
       urlFromHtml !== undefined &&
@@ -37,7 +38,7 @@ const extractLinks = ($) => {
       !urlFromHtml.includes("http")
     ) {
       // CLEANING UP URL ADDRESS FROM PAGE HTML
-      if (urlFromHtml.charAt(1) === "/") {
+      if (urlFromHtml.charAt(urlFromHtml.length - 1) === "/") {
         urlFromHtmlCleaned = urlFromHtml.slice(0, -1);
       } else {
         urlFromHtmlCleaned = urlFromHtml;
@@ -57,7 +58,19 @@ const extractLinks = ($) => {
     }
   });
 
-  return [...new Set(links)];
+  const visitedArray = [...visited];
+  const toVisitArray = [...toVisit];
+
+  const uniqueLinks = [...new Set(links)]
+    .sort()
+    .filter((item) => !visitedArray?.includes(item))
+    .map((el) => {
+      // console.log("toVisit array", toVisitArray);
+      toVisit.add(el);
+      return el;
+    });
+
+  return uniqueLinks;
 };
 
 async function request(links, nesting) {
@@ -72,10 +85,12 @@ const crawl = async (url, nesting = 3) => {
       return;
     }
     visited.add(url);
+    toVisit.delete(url);
 
+    fs.appendFileSync("file.txt", `${url}\n`);
     // ------------------------------
     // TO SEE THE PROGRESS!!!!!
-    // console.log("nestLvl", nesting, "URL- ", url);
+    console.log("nestLvl", nesting, "URL- ", url);
     // ------------------------------
 
     const { data } = await axios.get(url, {
@@ -85,16 +100,10 @@ const crawl = async (url, nesting = 3) => {
     });
 
     const $ = cheerio.load(data);
-    const links = extractLinks($);
+    extractLinks($);
 
-    if (links) {
-      links
-        .filter((link) => !visited.has(link)) // Filter out already visited links
-        .forEach((link) => toVisit.add(link));
-    }
-
-    toVisit.delete(url);
     const toVisitArray = [...toVisit];
+    // console.log("toVisitArray", toVisitArray);
 
     if (toVisitArray.length > 0) {
       const _ = await request(toVisitArray, nesting);
